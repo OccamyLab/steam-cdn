@@ -5,7 +5,7 @@ use steam_vent::{Connection, ServerList};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let server_list = ServerList::discover().await?;
-    let connection = Arc::new(Connection::anonymous(server_list).await?);
+    let connection = Arc::new(Connection::anonymous(&server_list).await?);
     let cdn = CDNClient::discover(connection).await?;
     // let depots = cdn.get_depots(vec![730]).await?;
     // println!("{:?}", depots);

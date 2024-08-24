@@ -14,7 +14,7 @@ use steam_vent::{
         },
         steammessages_contentsystem_steamclient::CContentServerDirectory_GetManifestRequestCode_Request,
     },
-    Connection,
+    Connection, ConnectionTrait,
 };
 
 use crate::error::Error;
