@@ -35,14 +35,14 @@ impl Depot {
 
     fn parse_manifests(&mut self, value: &[Value<'_>], r#type: &str) -> Result<(), Error> {
         if let Some(manifests_map) = value
-            .get(0)
+            .first()
             .ok_or(Error::NoneOption)?
             .get_obj()
             .ok_or(Error::NoneOption)?
             .get(r#type)
         {
             for (key, value) in &manifests_map
-                .get(0)
+                .first()
                 .ok_or(Error::NoneOption)?
                 .get_obj()
                 .ok_or(Error::NoneOption)?

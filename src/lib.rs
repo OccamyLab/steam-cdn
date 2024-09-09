@@ -6,6 +6,8 @@ extern crate thiserror;
 mod cdn;
 mod crypto;
 mod error;
+mod utils;
+mod web_api;
 
-pub use error::Error;
 pub use cdn::CDNClient;
+pub use error::Error;

@@ -1,11 +1,11 @@
-use std::{io, str};
 use aes::cipher::block_padding;
+use std::{io, str};
 use zip::result::ZipError;
 
 #[derive(Debug, Error)]
 pub enum ManifestError {
     #[error("lack of data: {0}")]
-    EOF(String),
+    Eof(String),
     #[error("decompress: {0}")]
     Decompress(String),
     #[error("magic mismatch: {0}")]

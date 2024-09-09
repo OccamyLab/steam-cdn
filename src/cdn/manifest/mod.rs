@@ -1,13 +1,8 @@
-use aes::{
-    cipher::{
-        block_padding::Pkcs7, generic_array::GenericArray, BlockDecrypt, BlockDecryptMut, KeyInit,
-        KeyIvInit,
-    },
-    Aes256, Aes256Dec,
-};
 use buf::TryBuf;
 use bytes::Bytes;
 use error::ManifestError;
+use file::{ChunkData, ManifestFile};
+use std::sync::Arc;
 use std::{
     io::{Cursor, Read},
     str,
@@ -17,93 +12,18 @@ use steam_vent::proto::{
     protobuf::Message,
 };
 use zip::ZipArchive;
-use base64::{prelude::BASE64_STANDARD, Engine};
 
-use crate::crypto::base64::base64_decode;
+use super::inner::InnerClient;
+use crate::{crypto::aes256, utils::base64::base64_decode};
 
 mod buf;
 pub mod error;
+pub mod file;
 
 const PROTOBUF_PAYLOAD_MAGIC: u32 = 0x71F617D0;
 const PROTOBUF_METADATA_MAGIC: u32 = 0x1F4812BE;
 const PROTOBUF_SIGNATURE_MAGIC: u32 = 0x1B81B817;
 const PROTOBUF_ENDOFMANIFEST_MAGIC: u32 = 0x32C415AB;
-
-#[derive(Debug)]
-pub struct ChunkData {
-    sha: Vec<u8>,
-    crc: u32,
-    offset: u64,
-    original_size: u32,
-    compressed_size: u32,
-}
-
-impl ChunkData {
-    pub fn sha(&self) -> Vec<u8> {
-        self.sha.clone()
-    }
-
-    pub fn id(&self) -> String {
-        BASE64_STANDARD.encode(&self.sha)
-    }
-
-    pub fn crc(&self) -> u32 {
-        self.crc
-    }
-
-    pub fn offset(&self) -> u64 {
-        self.offset
-    }
-
-    pub fn original_size(&self) -> u32 {
-        self.original_size
-    }
-
-    pub fn compressed_size(&self) -> u32 {
-        self.compressed_size
-    }
-}
-
-#[derive(Debug)]
-pub struct ManifestFile {
-    filename: String,
-    size: u64,
-    flags: u32,
-    sha_filename: Vec<u8>,
-    sha_content: Vec<u8>,
-    chunks: Vec<ChunkData>,
-    linktarget: String,
-}
-
-impl ManifestFile {
-    pub fn filename(&self) -> String {
-        self.filename.clone()
-    }
-
-    pub fn size(&self) -> u64 {
-        self.size
-    }
-
-    pub fn flags(&self) -> u32 {
-        self.flags
-    }
-
-    pub fn sha_filename(&self) -> Vec<u8> {
-        self.sha_filename.clone()
-    }
-
-    pub fn sha_content(&self) -> Vec<u8> {
-        self.sha_content.clone()
-    }
-
-    pub fn chunks(&self) -> &Vec<ChunkData> {
-        self.chunks.as_ref()
-    }
-
-    pub fn linktarget(&self) -> String {
-        self.linktarget.clone()
-    }
-}
 
 #[derive(Debug)]
 pub struct DepotManifest {
@@ -149,34 +69,21 @@ impl DepotManifest {
         if self.filenames_encrypted {
             for file in &mut self.files {
                 let mut encrypted = base64_decode(file.filename.as_bytes())?;
-
-                let mut iv = [0u8; 16];
-                let iv_len = iv.len();
-                iv.copy_from_slice(&encrypted[..iv_len]);
-                Aes256Dec::new(GenericArray::from_slice(&key))
-                    .decrypt_block(GenericArray::from_mut_slice(&mut iv[..]));
-
-                let filename = str::from_utf8(
-                    cbc::Decryptor::<Aes256>::new(
-                        GenericArray::from_slice(&key),
-                        GenericArray::from_slice(&iv),
-                    )
-                    .decrypt_padded_mut::<Pkcs7>(&mut encrypted[iv_len..])?,
-                )?;
-
-                file.filename = filename.to_string();
+                file.filename = str::from_utf8(&aes256::decrypt_cbc_with_iv_extraction(
+                    &mut encrypted[..],
+                    key,
+                )?)?
+                .to_string();
             }
-
             self.filenames_encrypted = false;
         }
         Ok(())
     }
-}
 
-impl TryFrom<&[u8]> for DepotManifest {
-    type Error = ManifestError;
-
-    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
+    pub(crate) fn deserialize(
+        client: Arc<InnerClient>,
+        data: &[u8],
+    ) -> Result<Self, ManifestError> {
         let cursor = Cursor::new(data);
         let mut buffer = Vec::new();
         ZipArchive::new(cursor)?
@@ -223,8 +130,10 @@ impl TryFrom<&[u8]> for DepotManifest {
             compressed_size: metadata.cb_disk_compressed(),
             files: payload
                 .mappings
-                .iter()
+                .into_iter()
                 .map(|map| ManifestFile {
+                    inner: client.clone(),
+                    depot_id: metadata.depot_id(),
                     filename: map.filename().to_string(),
                     size: map.size(),
                     flags: map.flags(),

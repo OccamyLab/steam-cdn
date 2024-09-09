@@ -1,9 +1,19 @@
+use aes::cipher::block_padding::UnpadError;
+use lzma_rs::error::Error as LzmaError;
 use steam_vent::NetworkError;
+use tokio::{sync::AcquireError, task::JoinError};
+use zip::result::ZipError;
 
 use crate::cdn::manifest::error::ManifestError;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+    #[error("lack of data: {0}")]
+    Eof(String),
+    #[error("decompress: {0}")]
+    Decompress(String),
     #[error("unexpected: {0}")]
     Unexpected(String),
     #[error("web request - {0}")]
@@ -12,10 +22,28 @@ pub enum Error {
     Network(String),
     #[error("malformed vdf - {0}")]
     InvalidVDF(String),
-    #[error("manifest {}", 0.to_string())]
-    Manifest(ManifestError),
+    #[error("manifest {0}")]
+    Manifest(#[from] ManifestError),
     #[error("unexpected none")]
     NoneOption,
+}
+
+impl From<JoinError> for Error {
+    fn from(err: JoinError) -> Self {
+        Self::Unexpected(err.to_string())
+    }
+}
+
+impl From<ZipError> for Error {
+    fn from(err: ZipError) -> Self {
+        Self::Decompress(err.to_string())
+    }
+}
+
+impl From<LzmaError> for Error {
+    fn from(err: LzmaError) -> Self {
+        Self::Decompress(err.to_string())
+    }
 }
 
 impl From<reqwest::Error> for Error {
@@ -36,8 +64,14 @@ impl From<keyvalues_parser::error::Error> for Error {
     }
 }
 
-impl From<ManifestError> for Error {
-    fn from(err: ManifestError) -> Self {
-        Self::Manifest(err)
+impl From<UnpadError> for Error {
+    fn from(err: UnpadError) -> Self {
+        Self::Unexpected(err.to_string())
+    }
+}
+
+impl From<AcquireError> for Error {
+    fn from(err: AcquireError) -> Self {
+        Self::Unexpected(err.to_string())
     }
 }
