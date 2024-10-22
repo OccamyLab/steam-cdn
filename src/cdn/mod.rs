@@ -1,4 +1,4 @@
-use depot::Depot;
+use depot::{AppDepots, Depot};
 use inner::InnerClient;
 use keyvalues_parser::Vdf;
 use manifest::DepotManifest;
@@ -37,35 +37,17 @@ impl CDNClient {
         })
     }
 
-    pub async fn get_depots(&self, app_ids: Vec<u32>) -> Result<Vec<Depot>, Error> {
+    pub async fn get_depots(&self, app_ids: Vec<u32>) -> Result<Vec<AppDepots>, Error> {
         let product_info = self.inner.get_product_info(app_ids).await?;
-        let mut depots: Vec<Depot> = Vec::new();
+        let mut apps_depots: Vec<AppDepots> = Vec::new();
 
         for app in product_info.apps {
-            if let Ok(vdf) = str::from_utf8(app.buffer()) {
-                let kv = Vdf::parse(vdf)?;
-                let depots_map = &kv
-                    .value
-                    .get_obj()
-                    .ok_or(Error::NoneOption)?
-                    .get("depots")
-                    .ok_or(Error::NoneOption)?
-                    .first()
-                    .ok_or(Error::NoneOption)?
-                    .get_obj()
-                    .ok_or(Error::NoneOption)?
-                    .0;
-                for (key, value) in depots_map {
-                    if let Ok(depot_id) = key.parse::<u32>() {
-                        let mut depot = Depot::new(app.appid(), depot_id);
-                        depot.parse(value)?;
-                        depots.push(depot);
-                    }
-                }
-            }
+            let mut app_depots = AppDepots::new(app.appid());
+            app_depots.vdf_parse(app.buffer())?;
+            apps_depots.push(app_depots);
         }
 
-        Ok(depots)
+        Ok(apps_depots)
     }
 
     pub async fn get_depot_decryption_key(

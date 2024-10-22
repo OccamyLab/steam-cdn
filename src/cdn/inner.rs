@@ -2,7 +2,8 @@ use reqwest::{Client, Response};
 use std::sync::Arc;
 use steam_vent::{
     proto::steammessages_clientserver_appinfo::{
-        cmsg_client_picsproduct_info_request::AppInfo, CMsgClientPICSProductInfoRequest,
+        cmsg_client_picsproduct_info_request::AppInfo, CMsgClientPICSAccessTokenRequest,
+        CMsgClientPICSAccessTokenResponse, CMsgClientPICSProductInfoRequest,
         CMsgClientPICSProductInfoResponse,
     },
     Connection, ConnectionTrait,
@@ -51,13 +52,23 @@ impl InnerClient {
         &self,
         app_ids: Vec<u32>,
     ) -> Result<CMsgClientPICSProductInfoResponse, Error> {
+        let tokens: CMsgClientPICSAccessTokenResponse = self
+            .connection
+            .job(CMsgClientPICSAccessTokenRequest {
+                appids: app_ids,
+                ..Default::default()
+            })
+            .await?;
+
         let product_info: CMsgClientPICSProductInfoResponse = self
             .connection
             .job(CMsgClientPICSProductInfoRequest {
-                apps: app_ids
+                apps: tokens
+                    .app_access_tokens
                     .into_iter()
-                    .map(|app_id| AppInfo {
-                        appid: Some(app_id),
+                    .map(|app_token| AppInfo {
+                        appid: app_token.appid,
+                        access_token: app_token.access_token,
                         ..Default::default()
                     })
                     .collect::<Vec<AppInfo>>(),

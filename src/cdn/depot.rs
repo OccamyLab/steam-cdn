@@ -1,4 +1,5 @@
-use keyvalues_parser::Value;
+use keyvalues_parser::{Value, Vdf};
+use std::str;
 
 use crate::error::Error;
 
@@ -18,16 +19,22 @@ impl Manifest {
 }
 
 #[derive(Debug)]
+pub struct Branch {
+    pub name: String,
+    pub description: Option<String>,
+    pub build_id: u32,
+    pub time_updated: Option<u64>,
+}
+
+#[derive(Debug)]
 pub struct Depot {
-    pub app_id: u32,
     pub depot_id: u32,
     pub manifests: Vec<Manifest>,
 }
 
 impl Depot {
-    pub fn new(app_id: u32, depot_id: u32) -> Self {
+    pub fn new(depot_id: u32) -> Self {
         Self {
-            app_id,
             depot_id,
             manifests: Vec::new(),
         }
@@ -73,9 +80,64 @@ impl Depot {
         Ok(())
     }
 
-    pub fn parse(&mut self, value: &[Value<'_>]) -> Result<(), Error> {
+    pub fn vdf_parse(&mut self, value: &[Value<'_>]) -> Result<(), Error> {
         self.parse_manifests(value, "manifests")?;
         self.parse_manifests(value, "encryptedmanifests")?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct AppDepots {
+    pub app_id: u32,
+    pub depots: Vec<Depot>,
+    pub branches: Vec<Branch>,
+}
+
+impl AppDepots {
+    pub fn new(app_id: u32) -> Self {
+        Self {
+            app_id,
+            depots: Vec::new(),
+            branches: Vec::new(),
+        }
+    }
+
+    pub fn vdf_parse(&mut self, buffer: &[u8]) -> Result<(), Error> {
+        if let Ok(vdf) = str::from_utf8(buffer) {
+            let kv = Vdf::parse(vdf)?;
+            let depots_map = &kv
+                .value
+                .get_obj()
+                .ok_or(Error::Unexpected("failed to get object".to_string()))?
+                .get("depots")
+                .ok_or(Error::Unexpected("no depots property".to_string()))?
+                .first()
+                .ok_or(Error::Unexpected("no depots body object".to_string()))?
+                .get_obj()
+                .ok_or(Error::Unexpected(
+                    "failed to get depots body object".to_string(),
+                ))?
+                .0;
+            for (key, value) in depots_map {
+                if let Ok(depot_id) = key.parse::<u32>() {
+                    let mut depot = Depot::new(depot_id);
+                    depot.vdf_parse(value)?;
+                    self.depots.push(depot);
+                } else if key == "branches" {
+                    let branches_map = &value
+                        .first()
+                        .ok_or(Error::NoneOption)?
+                        .get_obj()
+                        .ok_or(Error::NoneOption)?
+                        .0;
+                    for (key, value) in branches_map {
+                        println!("{:?} {:?}", key, value);
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 }

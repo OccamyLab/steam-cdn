@@ -1,20 +1,19 @@
 use std::{error::Error, sync::Arc};
 use steam_cdn::CDNClient;
 use steam_vent::{Connection, ServerList};
-use tokio::fs::OpenOptions;
+use tokio::fs::{self, OpenOptions};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let server_list = ServerList::discover().await?;
     let connection = Arc::new(Connection::anonymous(&server_list).await?);
     let cdn = CDNClient::discover(connection).await?;
-    
+
     let app_id = 730;
     let depot_id = 2347771;
-    let manifest_id = 9071851182114336641;
-    
-    //let depots = cdn.get_depots(vec![app_id]).await?;
-    //println!("{:?}", depots);
+    let manifest_id = 734640093393352243;
+
+    let depots = cdn.get_depots(vec![app_id]).await?;
 
     let depot_key = cdn.get_depot_decryption_key(app_id, depot_id).await?;
     let request_code = cdn
@@ -25,20 +24,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await?;
 
     for manifest_file in manifest.files() {
-        if manifest_file.filename() != "client.dll" {
-            continue;
-        }
+        if manifest_file.filename().ends_with("server.dll") {
+            fs::create_dir_all(manifest_file.path()).await?;
 
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .write(true)
-            .open(manifest_file.filename())
-            .await?;
-        manifest_file
-            .download(depot_key.unwrap(), None, &mut file)
-            .await?;
-        break;
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .write(true)
+                .open(manifest_file.full_path())
+                .await?;
+            manifest_file
+                .download(depot_key.unwrap(), None, &mut file)
+                .await?;
+        }
     }
     Ok(())
 }
