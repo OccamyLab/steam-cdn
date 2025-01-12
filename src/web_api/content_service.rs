@@ -28,7 +28,7 @@ struct ContentServerDirectory {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CDNServer {
     pub r#type: String,
     pub https: bool,

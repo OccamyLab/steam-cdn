@@ -8,8 +8,12 @@ use steam_vent::{
     },
     Connection, ConnectionTrait,
 };
+use tokio::sync::Mutex;
 
-use crate::{web_api::content_service::CDNServer, Error};
+use crate::{
+    web_api::{self, content_service::CDNServer},
+    Error,
+};
 
 use super::depot_chunk;
 
@@ -17,7 +21,7 @@ use super::depot_chunk;
 pub(crate) struct InnerClient {
     pub connection: Arc<Connection>,
     web_client: Client,
-    pub servers: Vec<CDNServer>,
+    pub servers: Arc<Mutex<Vec<(CDNServer, u32)>>>,
 }
 
 impl InnerClient {
@@ -25,7 +29,7 @@ impl InnerClient {
         Self {
             connection,
             web_client: Client::new(),
-            servers: Vec::new(),
+            servers: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -33,18 +37,35 @@ impl InnerClient {
         self.connection.cell_id()
     }
 
-    fn get_server(&self) -> Result<&CDNServer, Error> {
-        match self
-            .servers
+    async fn pick_server(&self) -> Result<CDNServer, Error> {
+        let mut servers = self.servers.lock().await;
+        if servers.is_empty() || servers.iter().all(|(_, penalty)| *penalty > 0) {
+            *servers = web_api::content_service::get_servers_for_steam_pipe(self.cell_id())
+                .await?
+                .into_iter()
+                .map(|s| (s, 0))
+                .collect();
+        }
+
+        if let Some((server, _)) = servers
             .iter()
-            .find(|&server| server.cell_id == self.connection.cell_id())
+            .find(|(server, penalty)| server.cell_id == self.cell_id() && *penalty == 0)
         {
-            Some(server) => Ok(server),
-            None => self
-                .servers
-                .iter()
-                .find(|server| server.r#type == "SteamCache" || server.r#type == "CDN")
-                .ok_or(Error::Network("no available cdn servers".to_string())),
+            return Ok(server.clone());
+        }
+
+        servers
+            .iter()
+            .filter(|(s, _)| s.r#type == "SteamCache" || s.r#type == "CDN")
+            .min_by_key(|(s, penalty)| (*penalty, s.weighted_load))
+            .ok_or(Error::Network("no available cdn servers".to_string()))
+            .map(|(server, _)| server.clone())
+    }
+
+    async fn server_penalty(&self, server: &CDNServer) {
+        let mut servers = self.servers.lock().await;
+        if let Some((_, penalty)) = servers.iter_mut().find(|(s, _)| s == server) {
+            *penalty += 1;
         }
     }
 
@@ -85,7 +106,7 @@ impl InnerClient {
         args: A,
         manifest_request_code: Option<u64>,
     ) -> Result<Response, Error> {
-        let server = self.get_server()?;
+        let server = self.pick_server().await?;
         let mut url = format!(
             "{}://{}:{}/{}/{}",
             if server.https { "https" } else { "http" },
@@ -98,7 +119,13 @@ impl InnerClient {
             url.push('/');
             url.push_str(manifest_request_code.to_string().as_str());
         }
-        Ok(self.web_client.get(url).send().await?)
+
+        let response = self.web_client.get(url).send().await?;
+        if !response.status().is_success() {
+            self.server_penalty(&server).await;
+        }
+
+        Ok(response)
     }
 
     pub async fn get_chunk(

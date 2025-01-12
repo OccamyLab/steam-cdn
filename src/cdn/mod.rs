@@ -12,7 +12,7 @@ use steam_vent::{
     Connection, ConnectionTrait,
 };
 
-use crate::{error::Error, web_api};
+use crate::Error;
 
 pub mod depot;
 pub mod depot_chunk;
@@ -27,15 +27,9 @@ pub struct CDNClient {
 }
 
 impl CDNClient {
-    pub async fn discover(connection: Arc<Connection>) -> Result<Self, Error> {
-        let mut inner = InnerClient::new(connection);
-        inner.servers =
-            web_api::content_service::get_servers_for_steam_pipe(inner.cell_id()).await?;
-        inner
-            .servers
-            .sort_by(|a, b| a.weighted_load.cmp(&b.weighted_load));
+    pub async fn new(connection: Arc<Connection>) -> Result<Self, Error> {
         Ok(Self {
-            inner: Arc::new(inner),
+            inner: Arc::new(InnerClient::new(connection)),
         })
     }
 

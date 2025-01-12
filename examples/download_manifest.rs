@@ -7,11 +7,11 @@ use tokio::fs::{self, OpenOptions};
 async fn main() -> Result<(), Box<dyn Error>> {
     let server_list = ServerList::discover().await?;
     let connection = Arc::new(Connection::anonymous(&server_list).await?);
-    let cdn = CDNClient::discover(connection).await?;
+    let cdn = CDNClient::new(connection).await?;
 
     let app_id = 730;
     let depot_id = 2347771;
-    let manifest_id = 734640093393352243;
+    let manifest_id = 4615480674484923598;
 
     let depot_key = cdn.get_depot_decryption_key(app_id, depot_id).await?;
     let request_code = cdn
