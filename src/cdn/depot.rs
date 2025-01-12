@@ -55,7 +55,11 @@ impl Depot {
                 .ok_or(Error::NoneOption)?
                 .0
             {
-                let data = value[0].get_obj().ok_or(Error::NoneOption)?;
+                let data = value
+                    .first()
+                    .ok_or(Error::NoneOption)?
+                    .get_obj()
+                    .ok_or(Error::NoneOption)?;
                 self.manifests.push(Manifest {
                     branch: key.to_string(),
                     gid: data
@@ -90,6 +94,7 @@ impl Depot {
 #[derive(Debug)]
 pub struct AppDepots {
     pub app_id: u32,
+    pub app_name: Option<String>,
     pub depots: Vec<Depot>,
     pub branches: Vec<Branch>,
 }
@@ -98,6 +103,7 @@ impl AppDepots {
     pub fn new(app_id: u32) -> Self {
         Self {
             app_id,
+            app_name: None,
             depots: Vec::new(),
             branches: Vec::new(),
         }
@@ -106,14 +112,32 @@ impl AppDepots {
     pub fn vdf_parse(&mut self, buffer: &[u8]) -> Result<(), Error> {
         if let Ok(vdf) = str::from_utf8(buffer) {
             let kv = Vdf::parse(vdf)?;
-            let depots_map = &kv
+            let appinfo = kv
                 .value
                 .get_obj()
-                .ok_or(Error::Unexpected("failed to get object".to_string()))?
-                .get("depots")
-                .ok_or(Error::Unexpected("no depots property".to_string()))?
+                .ok_or(Error::Unexpected("failed to get appinfo value".to_string()))?;
+            self.app_name = appinfo
+                .get("common")
+                .ok_or(Error::Unexpected("no appinfo.common key".to_string()))?
                 .first()
-                .ok_or(Error::Unexpected("no depots body object".to_string()))?
+                .ok_or(Error::Unexpected(
+                    "no first entry of appinfo.common".to_string(),
+                ))?
+                .get_obj()
+                .ok_or(Error::Unexpected(
+                    "failed to get appinfo.common body".to_string(),
+                ))?
+                .get("name")
+                .ok_or(Error::Unexpected("no appinfo.common.name key".to_string()))?
+                .first()
+                .map(|s| s.to_string());
+            let depots_map = &appinfo
+                .get("depots")
+                .ok_or(Error::Unexpected("no depots key".to_string()))?
+                .first()
+                .ok_or(Error::Unexpected(
+                    "no first entry of depots object".to_string(),
+                ))?
                 .get_obj()
                 .ok_or(Error::Unexpected(
                     "failed to get depots body object".to_string(),
@@ -125,15 +149,15 @@ impl AppDepots {
                     depot.vdf_parse(value)?;
                     self.depots.push(depot);
                 } else if key == "branches" {
-                    let branches_map = &value
-                        .first()
-                        .ok_or(Error::NoneOption)?
-                        .get_obj()
-                        .ok_or(Error::NoneOption)?
-                        .0;
-                    for (key, value) in branches_map {
-                        println!("{:?} {:?}", key, value);
-                    }
+                    // let branches_map = &value
+                    //     .first()
+                    //     .ok_or(Error::NoneOption)?
+                    //     .get_obj()
+                    //     .ok_or(Error::NoneOption)?
+                    //     .0;
+                    // for (key, value) in branches_map {
+                    //     println!("{:?} {:?}", key, value);
+                    // }
                 }
             }
         }

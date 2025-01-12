@@ -107,12 +107,14 @@ impl InnerClient {
         depot_key: [u8; 32],
         chunk_id: String,
     ) -> Result<Vec<u8>, Error> {
-        let mut bytes = self
+        let response = self
             .remote_cmd("depot", format!("{depot_id}/chunk/{chunk_id}"), None)
-            .await?
-            .bytes()
-            .await?
-            .to_vec();
+            .await?;
+        if !response.status().is_success() {
+            return Err(Error::HttpStatus(response.status()));
+        }
+
+        let mut bytes = response.bytes().await?.to_vec();
         depot_chunk::decrypt_and_decompress(&mut bytes[..], depot_key).await
     }
 }

@@ -1,5 +1,6 @@
 use aes::cipher::block_padding::UnpadError;
 use lzma_rs::error::Error as LzmaError;
+use reqwest::StatusCode;
 use steam_vent::NetworkError;
 use tokio::{sync::AcquireError, task::JoinError};
 use zip::result::ZipError;
@@ -18,6 +19,8 @@ pub enum Error {
     Unexpected(String),
     #[error("web request - {0}")]
     Request(String),
+    #[error("http status - {0}")]
+    HttpStatus(StatusCode),
     #[error("{0}")]
     Network(String),
     #[error("malformed vdf - {0}")]

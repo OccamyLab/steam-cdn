@@ -1,8 +1,7 @@
-use depot::{AppDepots, Depot};
+use depot::AppDepots;
 use inner::InnerClient;
-use keyvalues_parser::Vdf;
 use manifest::DepotManifest;
-use std::{str, sync::Arc};
+use std::sync::Arc;
 use steam_vent::{
     proto::{
         steammessages_clientserver_2::{
@@ -32,11 +31,15 @@ impl CDNClient {
         let mut inner = InnerClient::new(connection);
         inner.servers =
             web_api::content_service::get_servers_for_steam_pipe(inner.cell_id()).await?;
+        inner
+            .servers
+            .sort_by(|a, b| a.weighted_load.cmp(&b.weighted_load));
         Ok(Self {
             inner: Arc::new(inner),
         })
     }
 
+    // tbd: should be renamed
     pub async fn get_depots(&self, app_ids: Vec<u32>) -> Result<Vec<AppDepots>, Error> {
         let product_info = self.inner.get_product_info(app_ids).await?;
         let mut apps_depots: Vec<AppDepots> = Vec::new();

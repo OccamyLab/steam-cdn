@@ -107,10 +107,10 @@ impl ManifestFile {
     pub async fn download<S: AsyncWriteExt + Unpin>(
         &self,
         depot_key: [u8; 32],
-        max_tasks: Option<usize>,
         stream: &mut S,
+        max_tasks: Option<usize>,
     ) -> Result<(), Error> {
-        let max_tasks = max_tasks.unwrap_or(8);
+        let max_tasks = max_tasks.unwrap_or(4);
         let semaphore = Arc::new(Semaphore::new(max_tasks));
         let mut tasks = self
             .chunks()

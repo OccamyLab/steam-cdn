@@ -13,8 +13,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let depot_id = 2347771;
     let manifest_id = 734640093393352243;
 
-    let depots = cdn.get_depots(vec![app_id]).await?;
-
     let depot_key = cdn.get_depot_decryption_key(app_id, depot_id).await?;
     let request_code = cdn
         .get_manifest_request_code(app_id, depot_id, manifest_id)
@@ -34,7 +32,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .open(manifest_file.full_path())
                 .await?;
             manifest_file
-                .download(depot_key.unwrap(), None, &mut file)
+                .download(depot_key.unwrap(), &mut file, None)
                 .await?;
         }
     }

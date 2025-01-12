@@ -6,17 +6,17 @@ description = "Steam CDN"
 license = "Apache-2.0"
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "fs", "macros"] }
 futures = "0.3"
-steam-vent = { git = "https://github.com/AspectUnk/steam-vent.git" }
+steam-vent = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 keyvalues-parser = "0.2"
-reqwest = { version = "0.11", features = ["json", "rustls"] }
-thiserror = "1.0"
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+thiserror = "2.0"
 zip = "2.2"
-itertools = "0.13"
+itertools = "0.14"
 crc32fast = "1.4"
-bytes = "1.7"
+bytes = "1.9"
 base64 = "0.22"
 protobuf = "3.5"
 aes = "0.8"
